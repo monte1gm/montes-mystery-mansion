@@ -201,7 +201,7 @@ async function handleParsedCommand(parsed: ReturnType<typeof parseCommand>) {
   let typoRecovery = false
 
   if (parsed.kind === 'unknown' && runtime.doc.aiHelpEnabled && isLikelyTypo(parsed.raw)) {
-    appendLine('Consulting AI helper...', false)
+    appendLine('Doubt tries to read your typo...', false)
     const aiResult = await aiParse({
       text: parsed.raw,
       roomId: runtime.doc.currentRoomId,
@@ -210,7 +210,7 @@ async function handleParsedCommand(parsed: ReturnType<typeof parseCommand>) {
     })
 
     if (aiResult.error) {
-      appendLine(`AI help unavailable: ${aiResult.error}`, false)
+      appendLine(`Doubt is silent: ${aiResult.error}`, false)
       return
     }
 
@@ -220,7 +220,7 @@ async function handleParsedCommand(parsed: ReturnType<typeof parseCommand>) {
     }
 
     typoRecovery = true
-    appendLine(`AI helper suggests: ${aiResult.command}`, false)
+    appendLine(`Doubt suggests: ${aiResult.command}`, false)
     commandToUse = parseCommand(aiResult.command)
 
     if (commandToUse.kind === 'unknown') {
