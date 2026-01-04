@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Montes Mystery Mansion</title>
+  </head>
+<body>
+  <div id="app">
+    <div class="frame scanlines">
+      <div class="status-row">
+        <div class="status-left">
+          <div id="status-line">SIGN IN REQUIRED</div>
+          <div id="status-email" class="status-email"></div>
+        </div>
+        <div class="status-actions">
+          <span id="status-ai" class="pill">AI HELP: OFF</span>
+          <button id="sign-out" type="button" class="ghost">Sign Out</button>
+          <button id="typewriter-toggle" type="button" class="ghost">Typewriter: Off</button>
+        </div>
+      </div>
+
+      <div class="content-row">
+        <div class="main-column">
+          <div id="login-screen" class="panel">
+            <div class="headline">Montes Mystery Mansion</div>
+            <p>Sign in with Google to continue.</p>
+            <button id="sign-in" type="button">Sign In with Google</button>
+          </div>
+
+          <div id="denied-screen" class="panel hidden">
+            <div class="headline">Access Denied</div>
+            <p id="denied-email"></p>
+            <p>This account is not on the allowlist.</p>
+            <button id="denied-sign-out" type="button">Sign Out</button>
+          </div>
+
+          <div id="game-screen" class="hidden">
+            <div id="terminal-output" class="terminal-output" role="log" aria-live="polite"></div>
+            <form id="command-form" class="prompt-line" autocomplete="off">
+              <label class="prompt monospace" for="command-input">]</label>
+              <input
+                id="command-input"
+                class="command-input monospace"
+                name="command"
+                type="text"
+                spellcheck="false"
+                aria-label="Command input"
+                autocomplete="off"
+              />
+            </form>
+          </div>
+        </div>
+        <div id="doubt-overlay" class="doubt-overlay"></div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
