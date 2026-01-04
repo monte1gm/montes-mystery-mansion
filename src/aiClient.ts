@@ -1,7 +1,7 @@
-import { httpsCallable } from 'firebase/functions'
-import { getFunctionsInstance } from './firebase'
+import { getAuth } from 'firebase/auth'
 import type { PuzzleState } from './state'
 import type { RoomId } from './world'
+import { app } from './firebase'
 
 export interface AiParsePayload {
   text: string
@@ -15,21 +15,38 @@ export interface AiParseResponse {
   error?: string
 }
 
-export async function aiParse(payload: AiParsePayload): Promise<AiParseResponse> {
-  const fn = httpsCallable<AiParsePayload, AiParseResponse>(
-    getFunctionsInstance(),
-    'aiParse',
-  )
+const ENDPOINT =
+  'https://us-central1-montes-mystery-mansion.cloudfunctions.net/aiParse'
 
+export async function aiParse(payload: AiParsePayload): Promise<AiParseResponse> {
   try {
-    const result = await fn(payload)
-    const data = result.data || {}
+    const auth = getAuth(app)
+    const user = auth.currentUser
+    if (!user) return { command: '', error: 'UNAUTHENTICATED' }
+
+    const token = await user.getIdToken()
+
+    const res = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    const data = (await res.json().catch(() => ({}))) as AiParseResponse
+
+    if (!res.ok) {
+      return { command: '', error: data?.error || 'INTERNAL' }
+    }
+
     return {
       command: typeof data.command === 'string' ? data.command : '',
       error: typeof data.error === 'string' ? data.error : undefined,
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown AI helper error.'
-    return { command: '', error: message }
+  } catch (err: any) {
+    console.error('aiParse fetch failed:', err?.message || err, err)
+    return { command: '', error: 'INTERNAL' }
   }
 }

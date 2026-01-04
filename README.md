@@ -17,8 +17,8 @@ Apple IIe-style terminal adventure built with Vite + TypeScript. The game is hid
 6) Allowlist emails: `export APPROVED_EMAILS="you@example.com,ally@example.com"` then seed: `npm run seed`
 7) Deploy Firestore rules: `firebase deploy --only firestore:rules`
 8) Functions (AI helper):
-   - Local: `cd functions && npm install` (already locked), then `export OPENAI_API_KEY="..."` (and optionally `export OPENAI_MODEL="gpt-5-mini-2025-08-07"`), then `firebase emulators:start --only functions`
-   - Deploy: `firebase functions:secrets:set OPENAI_API_KEY`, optional model override via `firebase functions:config:set openai.model="gpt-5-mini-2025-08-07"` (falls back to the default if unset). After any config change, run `firebase deploy --only functions`.
+   - Local: `cd functions && npm install` (already locked), then `export OPENAI_API_KEY="..."` (and optionally `export OPENAI_MODEL="gpt-5"`), then `firebase emulators:start --only functions`
+   - Deploy: `firebase functions:secrets:set OPENAI_API_KEY`, optional model override via `firebase functions:config:set openai.model="gpt-5"` (falls back to the default if unset). After any config change, run `firebase deploy --only functions`.
 9) Run the app: `npm run dev` (browser talks to Firestore + callable function)
 
 ## Commands (local parser; AI helper only on unknowns if enabled)

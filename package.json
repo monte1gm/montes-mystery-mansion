@@ -10,7 +10,7 @@
     "seed": "tsx scripts/seed-firestore.ts"
   },
   "dependencies": {
-    "firebase": "^11.1.0"
+    "firebase": "^12.7.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.3",

@@ -11,6 +11,8 @@ import {
 import { getFirestore, type Firestore } from 'firebase/firestore'
 import { getFunctions, type Functions } from 'firebase/functions'
 
+const FUNCTIONS_REGION = 'us-central1'
+
 function getFirebaseConfig() {
   const {
     VITE_FIREBASE_API_KEY,
@@ -45,11 +47,8 @@ function getFirebaseConfig() {
   }
 }
 
-function ensureApp() {
-  if (getApps().length) {
-    return getApp()
-  }
-  return initializeApp(getFirebaseConfig())
+function ensureApp(): FirebaseApp {
+  return getApps().length ? getApp() : initializeApp(getFirebaseConfig())
 }
 
 let cachedApp: FirebaseApp | null = null
@@ -58,40 +57,41 @@ let cachedAuth: Auth | null = null
 let cachedProvider: GoogleAuthProvider | null = null
 let cachedFunctions: Functions | null = null
 
-export function getFirebaseApp() {
-  if (!cachedApp) {
-    cachedApp = ensureApp()
-  }
+export function getFirebaseApp(): FirebaseApp {
+  if (!cachedApp) cachedApp = ensureApp()
   return cachedApp
 }
 
-export function getDb() {
-  if (!cachedDb) {
-    cachedDb = getFirestore(getFirebaseApp())
-  }
+export function getDb(): Firestore {
+  if (!cachedDb) cachedDb = getFirestore(getFirebaseApp())
   return cachedDb
 }
 
-export function getAuthInstance() {
-  if (!cachedAuth) {
-    cachedAuth = getAuth(getFirebaseApp())
-  }
+export function getAuthInstance(): Auth {
+  if (!cachedAuth) cachedAuth = getAuth(getFirebaseApp())
   return cachedAuth
 }
 
-export function getGoogleProvider() {
-  if (!cachedProvider) {
-    cachedProvider = new GoogleAuthProvider()
-  }
+export function getGoogleProvider(): GoogleAuthProvider {
+  if (!cachedProvider) cachedProvider = new GoogleAuthProvider()
   return cachedProvider
 }
 
-export function getFunctionsInstance() {
-  if (!cachedFunctions) {
-    cachedFunctions = getFunctions(getFirebaseApp())
-  }
+/**
+ * IMPORTANT:
+ * Pin region so callable requests go to the same place you deployed aiParse.
+ * This avoids subtle “wrong endpoint / unauthenticated” issues.
+ */
+export function getFunctionsInstance(): Functions {
+  if (!cachedFunctions) cachedFunctions = getFunctions(getFirebaseApp(), FUNCTIONS_REGION)
   return cachedFunctions
 }
+
+// Convenience exports (optional, but very handy)
+export const app = getFirebaseApp()
+export const db = getDb()
+export const auth = getAuthInstance()
+export const functions = getFunctionsInstance()
 
 export function onAuthChange(callback: (user: User | null) => void) {
   return onAuthStateChanged(getAuthInstance(), callback)

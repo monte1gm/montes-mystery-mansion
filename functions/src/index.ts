@@ -1,16 +1,15 @@
-import * as functions from 'firebase-functions'
-import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { onRequest, HttpsError } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import { initializeApp } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 import OpenAI from 'openai'
 
 const app = initializeApp()
 const db = getFirestore(app)
-const openAiApiKey = defineSecret('OPENAI_API_KEY')
-const model =
-  process.env.OPENAI_MODEL ?? functions.config().openai?.model ?? 'gpt-5-mini-2025-08-07'
-console.log('aiParse model:', model)
+
+const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY')
+const MODEL = process.env.OPENAI_MODEL || 'gpt-5.2'
 
 type RoomId = 'entrance' | 'main'
 
@@ -52,92 +51,166 @@ function sanitizeText(text?: string) {
   return text.trim().slice(0, 200)
 }
 
-function getOpenAiClient(apiKey?: string) {
-  const resolvedKey = apiKey || process.env.OPENAI_API_KEY
-  if (!resolvedKey) {
-    return null
-  }
-  return new OpenAI({ apiKey: resolvedKey })
+function normalizeRoomId(roomId: unknown): RoomId | null {
+  if (roomId === 'entrance' || roomId === 'main') return roomId
+  return null
 }
 
-function getApiKeyFromSecrets() {
-  try {
-    return openAiApiKey.value()
-  } catch {
-    return undefined
+function normalizeInventory(inv: unknown): string[] {
+  if (!Array.isArray(inv)) return []
+  return inv.filter((i) => typeof i === 'string').map((s) => s.trim()).filter(Boolean)
+}
+
+function normalizePuzzle(p: unknown): Required<PuzzleState> {
+  const obj = (p && typeof p === 'object' ? (p as any) : {}) as any
+  return {
+    solved: Boolean(obj.solved),
+    drawerUnlocked: Boolean(obj.drawerUnlocked),
+    keyTaken: Boolean(obj.keyTaken),
   }
 }
 
-export const aiParse = onCall(
-  { enforceAppCheck: false, maxInstances: 10, secrets: [openAiApiKey] },
-  async (request) => {
-    const uid = request.auth?.uid
-    if (!uid) {
-      throw new HttpsError('unauthenticated', 'Sign-in required.')
+function corsify(req: any, res: any) {
+  const origin = req.headers.origin
+  // Allow your hosting origin(s). Add localhost for dev if needed.
+  const allowed = new Set([
+    'https://montes-mystery-mansion.web.app',
+    'https://montes-mystery-mansion.firebaseapp.com',
+    'http://localhost:5173',
+  ])
+
+  if (origin && allowed.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Max-Age', '3600')
+}
+
+export const aiParse = onRequest(
+  {
+    region: 'us-central1',
+    secrets: [OPENAI_API_KEY],
+    maxInstances: 10,
+  },
+  async (req, res) => {
+    corsify(req, res)
+
+    // Preflight
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('')
+      return
     }
 
-    const allow = await db.doc(`allowlist/${uid}`).get()
-    if (!allow.exists) {
-      throw new HttpsError('permission-denied', 'Not allowlisted.')
+    if (req.method !== 'POST') {
+      res.status(405).json({ command: '', error: 'METHOD_NOT_ALLOWED' })
+      return
     }
 
-    const payload = request.data as AiRequest
-    const text = sanitizeText(payload?.text)
-    if (!text) {
-      throw new HttpsError('invalid-argument', 'Text is required and must be under 200 chars.')
+    try {
+      // 1) Verify Firebase ID token from Authorization header: "Bearer <token>"
+      const authHeader = String(req.headers.authorization || '')
+      const match = authHeader.match(/^Bearer\s+(.+)$/i)
+      if (!match) {
+        res.status(401).json({ command: '', error: 'UNAUTHENTICATED' })
+        return
+      }
+
+      const token = match[1]
+      const decoded = await getAuth().verifyIdToken(token)
+      const uid = decoded.uid
+
+      // 2) Allowlist check
+      const allow = await db.doc(`allowlist/${uid}`).get()
+      if (!allow.exists) {
+        res.status(403).json({ command: '', error: 'NOT_ALLOWLISTED' })
+        return
+      }
+
+      const payload = (req.body || {}) as AiRequest
+      const text = sanitizeText(payload.text)
+      if (!text) {
+        res.status(400).json({ command: '', error: 'INVALID_ARGUMENT' })
+        return
+      }
+
+      const roomId = normalizeRoomId(payload.roomId)
+      if (!roomId) {
+        res.status(400).json({ command: '', error: 'INVALID_ARGUMENT' })
+        return
+      }
+
+      const inventory = normalizeInventory(payload.inventory)
+      const puzzle = normalizePuzzle(payload.puzzle)
+
+      const key = OPENAI_API_KEY.value()
+      if (!key) {
+        res.status(500).json({ command: '', error: 'AI_NOT_CONFIGURED' })
+        return
+      }
+
+      const client = new OpenAI({ apiKey: key })
+
+      const systemPrompt = [
+        'You translate player input into EXACTLY ONE allowed command line for a two-room text adventure.',
+        'Output must be a single line and must match ONE of the allowed formats exactly.',
+        'If you are not confident, output an empty string.',
+        '',
+        'ALLOWED COMMANDS:',
+        'help',
+        'look',
+        'enter',
+        'back',
+        'go inside',
+        'go out',
+        'go north',
+        'go east',
+        'go west',
+        'go south',
+        'examine desk',
+        'examine drawer',
+        'examine mirror',
+        'examine table',
+        'examine room',
+        'search',
+        'search room',
+        'open drawer',
+        'enter code ####',
+        'use code ####',
+        'take key',
+        'inventory',
+        'ai help on',
+        'ai help off',
+        'quit',
+        'exit',
+        '',
+        `CONTEXT: room=${roomId}; inventory=${inventory.join(', ') || 'empty'}; ` +
+          `puzzle: unlocked=${puzzle.drawerUnlocked}, solved=${puzzle.solved}, keyTaken=${puzzle.keyTaken}.`,
+      ].join('\n')
+
+      const response = await client.responses.create({
+        model: MODEL,
+        input: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: text },
+        ],
+        temperature: 0.1,
+        max_output_tokens: 30,
+      })
+
+      const candidate = (response.output_text || '').trim().split('\n')[0]?.trim() ?? ''
+
+      if (!candidate || !enforceAllowed(candidate)) {
+        res.json({ command: '' })
+        return
+      }
+
+      res.json({ command: candidate.toLowerCase() })
+    } catch (err: any) {
+      console.error('aiParse error:', err?.message || err)
+      res.status(500).json({ command: '', error: 'INTERNAL' })
     }
-
-    const roomId: RoomId | undefined =
-      payload?.roomId === 'entrance' || payload?.roomId === 'main'
-        ? payload.roomId
-        : undefined
-
-    if (!roomId) {
-      throw new HttpsError('invalid-argument', 'Room id is required.')
-    }
-
-    const inventory =
-      Array.isArray(payload?.inventory) && payload.inventory.every((i) => typeof i === 'string')
-        ? payload.inventory
-        : []
-
-    const puzzle: PuzzleState = {
-      solved: Boolean(payload?.puzzle?.solved),
-      drawerUnlocked: Boolean(payload?.puzzle?.drawerUnlocked),
-      keyTaken: Boolean(payload?.puzzle?.keyTaken),
-    }
-
-    const client = getOpenAiClient(getApiKeyFromSecrets())
-    if (!client) {
-      return { command: '', error: 'AI_NOT_CONFIGURED' }
-    }
-
-    const prompt = [
-      'You translate player input into ONE allowed command line for a two-room text adventure.',
-      'Allowed commands only:',
-      'help | look | enter | back | go inside | go out | go north | go east | go west | go south | examine desk | examine drawer | examine mirror | examine table | examine room | search | search room | open drawer | enter code #### | use code #### | take key | inventory | ai help on | ai help off | quit | exit',
-      'Output ONLY one command line, nothing else.',
-      'If input is impossible, map to the closest allowed command or return empty.',
-      `Context: room=${roomId}; inventory=${inventory.join(', ') || 'empty'}; puzzle: unlocked=${Boolean(puzzle.drawerUnlocked)}, solved=${Boolean(puzzle.solved)}, keyTaken=${Boolean(puzzle.keyTaken)}.`,
-    ].join('\n')
-
-    const completion = await client.chat.completions.create({
-      model,
-      temperature: 0,
-      max_tokens: 30,
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: text },
-      ],
-    })
-
-    const candidate =
-      completion.choices[0]?.message?.content?.trim().split('\n')[0].trim() ?? ''
-
-    if (!candidate || !enforceAllowed(candidate)) {
-      return { command: '' }
-    }
-
-    return { command: candidate.toLowerCase() }
   },
 )
