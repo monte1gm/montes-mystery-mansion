@@ -21,6 +21,7 @@ export interface GameStateDoc {
   puzzle: PuzzleState
   doubtPhase: number
   aiHelpEnabled: boolean
+  hasLight: boolean
   updatedAt?: unknown
 }
 
@@ -36,6 +37,7 @@ export const defaultGameState: GameStateDoc = {
   puzzle: { ...defaultPuzzleState },
   doubtPhase: 0,
   aiHelpEnabled: false,
+  hasLight: false,
 }
 
 function gameStateRef(uid: string): DocumentReference {
@@ -76,6 +78,7 @@ export async function ensureGameState(uid: string): Promise<GameStateDoc> {
     puzzle: normalizePuzzle(data?.puzzle),
     doubtPhase: typeof data?.doubtPhase === 'number' ? data.doubtPhase : 0,
     aiHelpEnabled: Boolean(data?.aiHelpEnabled),
+    hasLight: Boolean(data?.hasLight),
     updatedAt: data?.updatedAt,
   }
 }

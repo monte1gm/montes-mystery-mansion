@@ -8,6 +8,7 @@ export type CommandKind =
   | 'enterCode'
   | 'takeKey'
   | 'inventory'
+  | 'useHeadlamp'
   | 'aiToggle'
   | 'mmmHelp'
   | 'mmmHelpCommand'
@@ -20,7 +21,7 @@ export interface ParsedCommand {
   kind: CommandKind
   raw: string
   direction?: 'inside' | 'out' | 'north' | 'east' | 'west' | 'south'
-  target?: 'desk' | 'drawer' | 'room' | 'mirror' | 'table'
+  target?: 'desk' | 'drawer' | 'room' | 'mirror' | 'table' | 'key'
   code?: string
   aiEnabled?: boolean
   helpQuery?: string
@@ -49,6 +50,7 @@ const examineTargets: Record<string, ParsedCommand['target']> = {
   room: 'room',
   mirror: 'mirror',
   table: 'table',
+  key: 'key',
 }
 
 function parseEnterCode(cleaned: string, raw: string): ParsedCommand | null {
@@ -71,6 +73,7 @@ export function parseCommand(input: string): ParsedCommand {
   if (cleaned === 'look') return { kind: 'look', raw }
   if (cleaned === 'quit' || cleaned === 'exit') return { kind: 'quit', raw }
   if (cleaned === 'inventory' || cleaned === 'inv') return { kind: 'inventory', raw }
+  if (cleaned === 'use headlamp') return { kind: 'useHeadlamp', raw }
   if (cleaned === 'ai help on') return { kind: 'aiToggle', raw, aiEnabled: true }
   if (cleaned === 'ai help off') return { kind: 'aiToggle', raw, aiEnabled: false }
 

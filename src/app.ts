@@ -194,6 +194,16 @@ function handleExamine(
           'It has not been used in a long time.',
         ],
       }
+    case 'key':
+      if (!inMain) return { lines: ["You don't see that here."] }
+      if (!state.doc.puzzle.keyTaken) {
+        return { lines: ['What key?'] }
+      }
+      return {
+        lines: [
+          'There is a bronze key with a broken heart on the top. I wonder what it opens?',
+        ],
+      }
     default:
       return { lines: ["You don't see that here."] }
   }
@@ -247,16 +257,21 @@ function handleEnterCode(state: RuntimeState, code: string): CommandResult {
   }
 
   if (code === '4312') {
+    const existing = new Set(state.doc.inventory)
+    existing.add('headlamp')
+    existing.add('notebook')
     const updates: Partial<GameStateDoc> = {
+      inventory: Array.from(existing),
       puzzle: { ...state.doc.puzzle, drawerUnlocked: true, solved: true },
       doubtPhase: updateDoubtPhase(state.doc.doubtPhase, 2),
     }
 
+    state.doc.inventory = updates.inventory!
     state.doc.puzzle = updates.puzzle!
     state.doc.doubtPhase = updates.doubtPhase!
 
     return {
-      lines: ['The panel clicks.', 'The drawer unlocks.'],
+      lines: ['The panel clicks.', 'The drawer unlocks.', 'Inside you notice a headlamp and a notebook.'],
       updates,
       doubtTrigger: 'solvedCode',
     }
@@ -301,13 +316,29 @@ function handleInventory(state: RuntimeState): CommandResult {
   if (!state.doc.inventory.length) {
     return { lines: ['You are carrying nothing.'] }
   }
-  return { lines: ['You are carrying:', '- brass key'] }
+  const items = state.doc.inventory.map((item) => `- ${item}`)
+  return { lines: ['You are carrying:', ...items] }
 }
 
 function handleAiToggle(state: RuntimeState, enabled: boolean): CommandResult {
   const updates: Partial<GameStateDoc> = { aiHelpEnabled: enabled }
   state.doc.aiHelpEnabled = enabled
   return { lines: [`AI help ${enabled ? 'enabled' : 'disabled'}.`], updates }
+}
+
+function handleUseHeadlamp(state: RuntimeState): CommandResult {
+  if (!state.doc.inventory.includes('headlamp')) {
+    return { lines: ["You don't have a headlamp."] }
+  }
+
+  if (state.doc.hasLight) {
+    return { lines: ['The headlamp is already on.'] }
+  }
+
+  const updates: Partial<GameStateDoc> = { hasLight: true }
+  state.doc.hasLight = true
+
+  return { lines: ['You now have light.'], updates }
 }
 
 export function processCommand(state: RuntimeState, command: ParsedCommand): CommandResult {
@@ -325,10 +356,11 @@ export function processCommand(state: RuntimeState, command: ParsedCommand): Com
           'go inside/out        move between rooms',
           'go north/east/west   (blocked for now)',
           '',
-          'examine X            desk, drawer, mirror, table, room',
+          'examine X            desk, drawer, mirror, table, key, room',
           'search               search the room for clues',
           'open drawer          try the drawer',
           'enter code ####      attempt a 4-digit code',
+          'use headlamp         turn on your headlamp (if you have it)',
           'take key             take the brass key',
           'inventory            show items',
           'quit                 end session',
@@ -363,6 +395,9 @@ export function processCommand(state: RuntimeState, command: ParsedCommand): Com
 
     case 'aiToggle':
       return handleAiToggle(state, Boolean(command.aiEnabled))
+
+    case 'useHeadlamp':
+      return handleUseHeadlamp(state)
 
     case 'mmmHelp':
       return { lines: getFullManual(), doubtTrigger: undefined }
