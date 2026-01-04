@@ -1,10 +1,16 @@
+import * as functions from 'firebase-functions'
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
+import { defineSecret } from 'firebase-functions/params'
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import OpenAI from 'openai'
 
 const app = initializeApp()
 const db = getFirestore(app)
+const openAiApiKey = defineSecret('OPENAI_API_KEY')
+const model =
+  process.env.OPENAI_MODEL ?? functions.config().openai?.model ?? 'gpt-5-mini-2025-08-07'
+console.log('aiParse model:', model)
 
 type RoomId = 'entrance' | 'main'
 
@@ -46,16 +52,24 @@ function sanitizeText(text?: string) {
   return text.trim().slice(0, 200)
 }
 
-function getOpenAiClient() {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) {
+function getOpenAiClient(apiKey?: string) {
+  const resolvedKey = apiKey || process.env.OPENAI_API_KEY
+  if (!resolvedKey) {
     return null
   }
-  return new OpenAI({ apiKey })
+  return new OpenAI({ apiKey: resolvedKey })
+}
+
+function getApiKeyFromSecrets() {
+  try {
+    return openAiApiKey.value()
+  } catch {
+    return undefined
+  }
 }
 
 export const aiParse = onCall(
-  { enforceAppCheck: false, maxInstances: 10 },
+  { enforceAppCheck: false, maxInstances: 10, secrets: [openAiApiKey] },
   async (request) => {
     const uid = request.auth?.uid
     if (!uid) {
@@ -93,7 +107,7 @@ export const aiParse = onCall(
       keyTaken: Boolean(payload?.puzzle?.keyTaken),
     }
 
-    const client = getOpenAiClient()
+    const client = getOpenAiClient(getApiKeyFromSecrets())
     if (!client) {
       return { command: '', error: 'AI help unavailable (missing OPENAI_API_KEY).' }
     }
