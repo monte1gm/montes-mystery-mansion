@@ -109,10 +109,8 @@ export const aiParse = onCall(
 
     const client = getOpenAiClient(getApiKeyFromSecrets())
     if (!client) {
-      return { command: '', error: 'AI help unavailable (missing OPENAI_API_KEY).' }
+      return { command: '', error: 'AI_NOT_CONFIGURED' }
     }
-
-    const model = process.env.OPENAI_MODEL || 'gpt-5-mini-2025-08-07'
 
     const prompt = [
       'You translate player input into ONE allowed command line for a two-room text adventure.',
